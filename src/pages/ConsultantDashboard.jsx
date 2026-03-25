@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import Sidebar from '../components/Sidebar';
@@ -148,17 +148,39 @@ const ResumeTab = () => {
   const [file, setFile] = useState(null);
   const [extracting, setExtracting] = useState(false);
   const [skills, setSkills] = useState([]);
+  const [experience, setExperience] = useState(0);
+  const fileInputRef = useRef(null);
 
-  const handleUpload = (e) => {
-    e.preventDefault();
-    setFile("aditya_sharma_resume_v4.pdf");
+  const handleFileChange = async (e) => {
+    const selectedFile = e.target.files[0];
+    if (!selectedFile) return;
+    
+    setFile(selectedFile.name);
     setExtracting(true);
     
-    // Simulate AI extraction
-    setTimeout(() => {
+    const formData = new FormData();
+    formData.append('resume', selectedFile);
+    
+    try {
+      const response = await fetch('http://localhost:3000/api/resume/analyze', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setSkills(data.skills);
+        setExperience(data.experienceYears);
+      } else {
+        console.error("Extraction failed: " + data.message);
+        setSkills(['Parsing Failed']);
+      }
+    } catch (err) {
+      console.error(err);
+      setSkills(['Backend Offline']);
+    } finally {
       setExtracting(false);
-      setSkills(['Java 17', 'Spring Boot 3', 'Microservices', 'Docker', 'Kubernetes', 'AWS EC2', 'PostgreSQL', 'Kafka', 'React.js']);
-    }, 2500);
+    }
   };
 
   return (
@@ -168,7 +190,7 @@ const ResumeTab = () => {
         <p style={{ color:'var(--text-muted)', fontSize:'0.9rem' }}>Upload your latest resume. Our AI agent will automatically parse and extract your skills to update your consultant profile.</p>
         
         <div 
-          onClick={handleUpload}
+          onClick={() => fileInputRef.current && fileInputRef.current.click()}
           style={{ 
             border: '2px dashed rgba(0,212,255,0.3)', borderRadius:'12px', padding:'50px 20px', 
             textAlign:'center', cursor:'pointer', background:'rgba(0,212,255,0.05)',
@@ -177,6 +199,13 @@ const ResumeTab = () => {
           onMouseEnter={e => e.currentTarget.style.borderColor='rgba(0,212,255,0.8)'}
           onMouseLeave={e => e.currentTarget.style.borderColor='rgba(0,212,255,0.3)'}
         >
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            style={{ display: 'none' }} 
+            accept=".pdf,.txt,.docx" 
+          />
           {file ? (
             <div style={{ color:'var(--accent-cyan)' }}>
               <FileText size={40} style={{margin:'0 auto 15px'}} />
@@ -222,7 +251,9 @@ const ResumeTab = () => {
               ))}
             </div>
             <div style={{ marginTop:'30px', padding:'15px', background:'rgba(0,255,179,0.1)', borderLeft:'4px solid #00FFB3', fontSize:'0.85rem' }}>
-              <strong>Extraction Success:</strong> 9 technical skills mapped to standard ontology. Profile synchronized.
+              <strong>Extraction Success:</strong> {skills.length} technical skills mapped to standard ontology. Profile synchronized.
+              <br/><br/>
+              <strong>Estimated Experience:</strong> {experience} years based on chronological parsing.
             </div>
           </motion.div>
         ) : (

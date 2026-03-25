@@ -1,0 +1,22 @@
+﻿
+> hexaware-pool-consultant-management@1.0.0 build
+> vite build
+
+[36mvite v6.4.1 [32mbuilding for production...[36m[39m
+transforming...
+[32mΓ£ô[39m 3 modules transformed.
+npm : [31mΓ£ù[39m Build failed in 107ms
+At line:1 char:1
++ npm run build 2>&1 | Out-String | Out-File build_error2.txt -Encoding ...
++ ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo              : NotSpecified: ([31m    Γ£ù[39m Build failed i    n 107ms:String) [], Rem    oteException
+    + FullyQualifiedErrorId     : NativeCommandError
+ 
+[31merror during build:
+[31mCould not resolve "./index.css" from "src/main.jsx"[31m
+file: [36mC:/Users/pavit/OneDrive/Desktop/SA Hackathon/src/main.jsx[31m
+    at getRollupError (file:///C:/Users/pavit/OneDrive/Desktop/SA%20Hackathon/node_modules/rollup/dist/es/shared/parseAst.js:406:41)
+    at error (file:///C:/Users/pavit/OneDrive/Desktop/SA%20Hackathon/node_modules/rollup/dist/es/shared/parseAst.js:402:42)
+    at ModuleLoader.handleInvalidResolvedId (file:///C:/Users/pavit/OneDrive/Desktop/SA%20Hackathon/node_modules/rollup/dist/es/shared/node-entry.js:21765:24)
+    at file:///C:/Users/pavit/OneDrive/Desktop/SA%20Hackathon/node_modules/rollup/dist/es/shared/node-entry.js:21725:26[39m
+

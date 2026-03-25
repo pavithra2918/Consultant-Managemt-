@@ -1,0 +1,2 @@
+Hey, I am Aditya Sharma. I have 10 years of professional experience as a senior consultant.
+My skills include Java, Spring Boot, React, and Python. I worked from 2014 - 2024 building Microservices and deploying them to AWS. I also use Docker and Kubernetes.

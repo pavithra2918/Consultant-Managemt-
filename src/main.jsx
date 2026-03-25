@@ -4,7 +4,6 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 
 // Import our new React global CSS and legacy styles
-import './index.css';
 import '../css/main.css';
 import '../css/home.css';
 import '../css/admin.css';

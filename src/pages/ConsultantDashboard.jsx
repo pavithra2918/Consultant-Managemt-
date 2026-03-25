@@ -405,7 +405,7 @@ const ConsultantDashboard = () => {
 
   return (
     <PageTransition>
-      <div className="layout-with-sidebar">
+      <div className="layout-with-sidebar" id="page-dashboard">
         <Sidebar isAdminView={false} />
         
         <main className="main-content">

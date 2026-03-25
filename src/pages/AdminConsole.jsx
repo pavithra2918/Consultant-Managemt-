@@ -22,7 +22,7 @@ const AdminConsole = () => {
 
   return (
     <PageTransition>
-      <div className="layout-with-sidebar">
+      <div className="layout-with-sidebar" id="page-admin">
         <Sidebar isAdminView={true} />
         
         <main className="main-content">

@@ -456,3 +456,20 @@ body::after {
   .top-nav { padding: 15px 20px; }
   .nav-links { display: none; }
 }
+
+/* React specific layout overrides */
+.layout-with-sidebar {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-deep);
+}
+
+.tab-anim-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}

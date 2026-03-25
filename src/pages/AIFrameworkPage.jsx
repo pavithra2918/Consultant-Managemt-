@@ -156,7 +156,7 @@ const AIFrameworkPage = () => {
 
   return (
     <PageTransition>
-      <section className="page active" style={{ display: 'block' }}>
+      <section className="page active" id="page-agents" style={{ display: 'block' }}>
         <div className="agents-mesh"></div>
         <div className="star-bg" id="star-bg"></div>
         <canvas ref={canvasRef} id="agent-canvas"></canvas>

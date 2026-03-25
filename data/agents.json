@@ -1,0 +1,112 @@
+{
+  "agents": [
+    {
+      "id": "resume",
+      "name": "Resume Agent",
+      "icon": "📄",
+      "color": "#00D4FF",
+      "colorRgb": "0,212,255",
+      "role": "Monitors and validates consultant resume submissions, ensuring they are up-to-date and complete.",
+      "inputs": [
+        "Consultant ID",
+        "Resume file (PDF/DOCX)",
+        "Last update timestamp"
+      ],
+      "outputs": [
+        "Update status",
+        "Validation report",
+        "Missing sections alert",
+        "Compliance score"
+      ],
+      "aiReasoning": "Uses Gemini LLM to extract resume sections, validate formatting, and provide improvement suggestions via prompt engineering on resume text.",
+      "metrics": {
+        "latency": 72,
+        "queueLoad": 68,
+        "errorRate": 0.2,
+        "status": "Online",
+        "cyclesRun": 1240
+      }
+    },
+    {
+      "id": "attendance",
+      "name": "Attendance Agent",
+      "icon": "📅",
+      "color": "#00FFB3",
+      "colorRgb": "0,255,179",
+      "role": "Tracks and reports daily attendance for bench consultants, detecting anomalies in real time.",
+      "inputs": [
+        "Consultant ID",
+        "Daily check-in/out logs",
+        "Calendar events"
+      ],
+      "outputs": [
+        "Attendance percentage",
+        "Missed report alert",
+        "Monthly summary",
+        "Compliance flag"
+      ],
+      "aiReasoning": "Uses generative AI to infer attendance patterns, predict risk of disengagement, and generate natural-language attendance summaries for managers.",
+      "metrics": {
+        "latency": 45,
+        "queueLoad": 42,
+        "errorRate": 0.1,
+        "status": "Online",
+        "cyclesRun": 3520
+      }
+    },
+    {
+      "id": "opportunity",
+      "name": "Opportunity Agent",
+      "icon": "🎯",
+      "color": "#FFB800",
+      "colorRgb": "255,184,0",
+      "role": "Matches bench consultants to open project opportunities based on skills, availability, and client needs.",
+      "inputs": [
+        "Consultant skill profile",
+        "Available opportunities DB",
+        "Project requirements"
+      ],
+      "outputs": [
+        "Match score",
+        "Recommended opportunities list",
+        "Interview scheduling trigger",
+        "Gap analysis"
+      ],
+      "aiReasoning": "Uses embedding-based semantic search and LLM reasoning to rank and explain opportunity matches beyond keyword matching.",
+      "metrics": {
+        "latency": 88,
+        "queueLoad": 85,
+        "errorRate": 1.4,
+        "status": "Active",
+        "cyclesRun": 878
+      }
+    },
+    {
+      "id": "training",
+      "name": "Training Agent",
+      "icon": "🎓",
+      "color": "#7B2FFF",
+      "colorRgb": "123,47,255",
+      "role": "Prescribes and tracks training paths for consultants based on skill gaps and market demand.",
+      "inputs": [
+        "Skill gap report",
+        "Training catalog",
+        "Consultant learning history"
+      ],
+      "outputs": [
+        "Personalized training plan",
+        "Completion status",
+        "Certification recommendations",
+        "Progress report"
+      ],
+      "aiReasoning": "Uses LLM to generate dynamic, personalized learning paths and produce progress summaries in plain English for managers.",
+      "metrics": {
+        "latency": 55,
+        "queueLoad": 55,
+        "errorRate": 0.3,
+        "status": "Online",
+        "cyclesRun": 2105
+      }
+    }
+  ]
+}

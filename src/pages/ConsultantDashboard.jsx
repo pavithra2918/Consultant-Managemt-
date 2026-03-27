@@ -271,13 +271,45 @@ const ResumeTab = () => {
 // ------------------------------------------------------------------
 const AttendanceTab = () => {
   const days = Array.from({length: 31}, (_, i) => i + 1);
-  const getStatus = (day) => {
-    if (day > 25) return 'future';
-    if ([6, 7, 13, 14, 20, 21].includes(day)) return 'weekend';
-    if (day === 10) return 'absent';
-    if (day === 18) return 'leave';
-    return 'present';
+  const [attendance, setAttendance] = useState(null);
+
+  useEffect(() => {
+    fetch('http://localhost:3000/api/consultant/1/state')
+      .then(r => r.json())
+      .then(data => {
+        if(data.success) setAttendance(data.state.attendance);
+      }).catch(err => console.error("Agent Sync Error:", err));
+  }, []);
+
+  const toggleDay = async (day) => {
+    if (!attendance) return;
+    const current = attendance[day];
+    if (current === 'future' || current === 'weekend') return; // Cannot edit future or weekends
+    
+    // Cycle: present -> absent -> leave -> present
+    const cycle = { present: 'absent', absent: 'leave', leave: 'present' };
+    const nextStatus = cycle[current];
+    
+    // Optimistic UI Data Sync
+    setAttendance(prev => ({ ...prev, [day]: nextStatus }));
+
+    // Emit mutation to Backend Agent
+    try {
+      await fetch('http://localhost:3000/api/attendance/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consultantId: "1", day, status: nextStatus })
+      });
+    } catch(e) { 
+      console.error("Database sync failed", e); 
+      alert("⚠️ Warning: Node.js Backend is disconnected! Attendance was updated in React memory, but could not sync to persistent database.");
+    }
   };
+
+  if (!attendance) return <div style={{padding:'40px', textAlign:'center', color:'var(--accent-cyan)'}}>Syncing with Attendance Agent DB...</div>;
+
+  const counts = { present: 0, absent: 0, leave: 0 };
+  Object.values(attendance).forEach(val => { if (counts[val] !== undefined) counts[val]++ });
 
   return (
     <div className="tab-anim-wrapper glass-card" style={{ padding:'40px' }}>
@@ -290,9 +322,9 @@ const AttendanceTab = () => {
       </div>
 
       <div style={{ display:'flex', gap:'20px', marginBottom:'30px', fontSize:'0.85rem' }}>
-        <span style={{display:'flex', alignItems:'center', gap:'8px'}}><div style={{width:'12px',height:'12px',borderRadius:'50%',background:'#00FFB3'}}></div> Present (16)</span>
-        <span style={{display:'flex', alignItems:'center', gap:'8px'}}><div style={{width:'12px',height:'12px',borderRadius:'50%',background:'#FF3366'}}></div> Absent (1)</span>
-        <span style={{display:'flex', alignItems:'center', gap:'8px'}}><div style={{width:'12px',height:'12px',borderRadius:'50%',background:'#FFB800'}}></div> Leave (1)</span>
+        <span style={{display:'flex', alignItems:'center', gap:'8px'}}><div style={{width:'12px',height:'12px',borderRadius:'50%',background:'#00FFB3'}}></div> Present ({counts.present})</span>
+        <span style={{display:'flex', alignItems:'center', gap:'8px'}}><div style={{width:'12px',height:'12px',borderRadius:'50%',background:'#FF3366'}}></div> Absent ({counts.absent})</span>
+        <span style={{display:'flex', alignItems:'center', gap:'8px'}}><div style={{width:'12px',height:'12px',borderRadius:'50%',background:'#FFB800'}}></div> Leave ({counts.leave})</span>
         <span style={{display:'flex', alignItems:'center', gap:'8px'}}><div style={{width:'12px',height:'12px',borderRadius:'50%',background:'rgba(255,255,255,0.05)'}}></div> Weekend/Future</span>
       </div>
 
@@ -305,7 +337,7 @@ const AttendanceTab = () => {
           <div className="cal-day pad"></div><div className="cal-day pad"></div><div className="cal-day pad"></div><div className="cal-day pad"></div><div className="cal-day pad"></div><div className="cal-day pad"></div>
           
           {days.map(d => {
-            const status = getStatus(d);
+            const status = attendance[d];
             let bg = 'rgba(255,255,255,0.03)';
             let border = '1px solid rgba(255,255,255,0.05)';
             if (status === 'present') { bg = 'rgba(0,255,179,0.1)'; border = '1px solid rgba(0,255,179,0.4)'; }
@@ -314,13 +346,14 @@ const AttendanceTab = () => {
             
             return (
               <motion.div 
-                whileHover={{ y:-2, background:'rgba(255,255,255,0.1)' }}
+                whileHover={{ y: (status === 'future' || status === 'weekend') ? 0 : -2, background: (status === 'future' || status === 'weekend') ? bg : 'rgba(255,255,255,0.1)' }}
                 key={d} 
+                onClick={() => toggleDay(d)}
                 style={{
                   aspectRatio:'1', background:bg, border:border, borderRadius:'8px',
                   display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.1rem',
                   color: status === 'future' || status === 'weekend' ? 'rgba(255,255,255,0.3)' : '#fff',
-                  cursor:'pointer'
+                  cursor: status === 'future' || status === 'weekend' ? 'default' : 'pointer'
                 }}
               >
                 {d}
@@ -334,82 +367,227 @@ const AttendanceTab = () => {
 };
 
 // ------------------------------------------------------------------
-// TRAINING TAB
+// TRAINING TAB (Phase 4 Dynamic Hub)
 // ------------------------------------------------------------------
-const TrainingTab = () => {
+const TrainingTab = ({ user }) => {
+  const [targetJobId, setTargetJobId] = useState(102); // Default target Job
+  const [trainingPlan, setTrainingPlan] = useState(null);
+
+  // Fetch dynamic recommendations when target job changes
+  useEffect(() => {
+    fetch('http://localhost:3000/api/training/recommend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ consultantId: "1", targetJobId, userSkills: user.skills })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) setTrainingPlan(data);
+    }).catch(e => console.error("Dynamic Training Sync Failed", e));
+  }, [targetJobId, user.skills]);
+
+  const handleEnrollment = async (courseId) => {
+    // Optimistic UI update
+    setTrainingPlan(prev => ({
+      ...prev,
+      recommendations: prev.recommendations.map(c => c.id === courseId ? { ...c, status: 'In Progress' } : c)
+    }));
+
+    try {
+      await fetch('http://localhost:3000/api/training/enroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consultantId: "1", targetModule: courseId })
+      });
+    } catch (e) { 
+      alert("⚠️ Warning: Node.js Backend is disconnected! State updated in memory.");
+    }
+  };
+
+  if (!trainingPlan) return <div style={{padding:'40px', color:'var(--accent-cyan)'}}>Generating AI Training Plan based on your skills...</div>;
+
   return (
     <div className="tab-anim-wrapper" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'30px' }}>
       <div className="glass-card" style={{ padding:'40px' }}>
-        <h3><Zap size={20} style={{marginRight:'10px', color:'var(--accent-cyan)', verticalAlign:'middle'}}/> AI Skill Gap Analysis</h3>
-        <p style={{ color:'var(--text-muted)', fontSize:'0.9rem', marginBottom:'30px' }}>
-          Comparing your extracted skills against the standard <strong style={{color:'#fff'}}>"Senior Full Stack Engineer"</strong> role requirements.
+        <h3><Zap size={20} style={{marginRight:'10px', color:'var(--accent-cyan)', verticalAlign:'middle'}}/> Dynamic Skill Gap Analysis</h3>
+        <p style={{ color:'var(--text-muted)', fontSize:'0.9rem', marginBottom:'20px' }}>
+          Comparing your current skills against <strong style={{color:'#fff'}}>{trainingPlan.targetJob}</strong>.
         </p>
+        
+        <div style={{ marginBottom:'25px' }}>
+          <label style={{ fontSize:'0.85rem', color:'var(--text-muted)', display:'block', marginBottom:'8px' }}>Change Target Role:</label>
+          <select 
+            value={targetJobId} onChange={e => setTargetJobId(parseInt(e.target.value))}
+            style={{ width:'100%', padding:'10px', background:'rgba(0,0,0,0.3)', color:'#fff', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'6px' }}
+          >
+            <option value={101}>Senior Backend Developer</option>
+            <option value={102}>Full Stack Architect</option>
+            <option value={103}>Data Scientist</option>
+            <option value={104}>Cloud Infrastructure Dev</option>
+            <option value={105}>React Frontend Engineer</option>
+          </select>
+        </div>
 
-        <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
-          <div>
-            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px', fontSize:'0.85rem'}}>
-              <span>React ecosystem (Matches role)</span> <span style={{color:'#00FFB3'}}>100% Match</span>
+        <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+          <strong style={{ fontSize:'0.9rem', color:'#fff' }}>Identified Missing Skills:</strong>
+          {trainingPlan.missingSkills.length === 0 ? (
+            <div style={{ color:'#00FFB3', fontSize:'0.9rem' }}>You possess all required skills for this role! 🎉</div>
+          ) : (
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
+              {trainingPlan.missingSkills.map(s => (
+                <span key={s} style={{ padding:'6px 12px', background:'rgba(255,51,102,0.1)', color:'#FF3366', borderRadius:'16px', fontSize:'0.8rem', border:'1px solid rgba(255,51,102,0.3)' }}>
+                  {s}
+                </span>
+              ))}
             </div>
-            <div style={{height:'6px', background:'rgba(255,255,255,0.1)', borderRadius:'3px'}}><div style={{width:'100%',height:'100%',background:'#00FFB3',borderRadius:'3px',boxShadow:'0 0 10px #00FFB3'}}></div></div>
-          </div>
-          <div>
-            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px', fontSize:'0.85rem'}}>
-              <span>Java / Spring Boot (Matches role)</span> <span style={{color:'#00FFB3'}}>100% Match</span>
-            </div>
-            <div style={{height:'6px', background:'rgba(255,255,255,0.1)', borderRadius:'3px'}}><div style={{width:'100%',height:'100%',background:'#00FFB3',borderRadius:'3px',boxShadow:'0 0 10px #00FFB3'}}></div></div>
-          </div>
-          <div>
-            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px', fontSize:'0.85rem'}}>
-              <span>System Design & Architecture</span> <span style={{color:'#FFB800'}}>Gap Detected</span>
-            </div>
-            <div style={{height:'6px', background:'rgba(255,255,255,0.1)', borderRadius:'3px'}}><div style={{width:'40%',height:'100%',background:'#FFB800',borderRadius:'3px',boxShadow:'0 0 10px #FFB800'}}></div></div>
-          </div>
-          <div>
-            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px', fontSize:'0.85rem'}}>
-              <span>GraphQL / Apollo</span> <span style={{color:'#FF3366'}}>Missing</span>
-            </div>
-            <div style={{height:'6px', background:'rgba(255,255,255,0.1)', borderRadius:'3px'}}><div style={{width:'10%',height:'100%',background:'#FF3366',borderRadius:'3px'}}></div></div>
-          </div>
+          )}
         </div>
       </div>
 
       <div className="glass-card" style={{ padding:'40px' }}>
-        <h3><Award size={20} style={{marginRight:'10px', verticalAlign:'middle'}}/> Recommended Training Plan</h3>
+        <h3><Award size={20} style={{marginRight:'10px', verticalAlign:'middle'}}/> Recommended Courses</h3>
         <p style={{ color:'var(--text-muted)', fontSize:'0.9rem', marginBottom:'30px' }}>
-          Auto-enrolled modules based on gap analysis. Keep completing these to improve your placement chances.
+          Curated modules to permanently bridge your technical gaps.
         </p>
 
         <div style={{ display:'flex', flexDirection:'column', gap:'15px' }}>
-          <div style={{ padding:'20px', background:'rgba(255,255,255,0.03)', borderLeft:'3px solid #00FFB3', borderRadius:'4px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
-              <strong style={{fontSize:'0.95rem'}}>Hexaware Cloud Native Architecture</strong>
-              <span style={{fontSize:'0.75rem', background:'rgba(0,255,179,0.1)', color:'#00FFB3', padding:'4px 8px', borderRadius:'12px'}}>Completed</span>
-            </div>
-            <div style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>Completed on: Mar 15, 2026</div>
-          </div>
-
-          <div style={{ padding:'20px', background:'rgba(255,255,255,0.03)', borderLeft:'3px solid #00D4FF', borderRadius:'4px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
-              <strong style={{fontSize:'0.95rem'}}>System Design Masterclass</strong>
-              <span style={{fontSize:'0.75rem', background:'rgba(0,212,255,0.1)', color:'#00D4FF', padding:'4px 8px', borderRadius:'12px'}}>In Progress</span>
-            </div>
-            <div style={{height:'4px', background:'rgba(255,255,255,0.1)', borderRadius:'2px', marginBottom:'10px'}}><div style={{width:'40%',height:'100%',background:'#00D4FF',borderRadius:'2px',boxShadow:'0 0 8px #00D4FF'}}></div></div>
-            <div style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>Estimated completion: Mar 28, 2026</div>
-          </div>
-
-          <div style={{ padding:'20px', background:'rgba(255,255,255,0.03)', borderLeft:'3px solid #555', borderRadius:'4px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
-              <strong style={{fontSize:'0.95rem'}}>GraphQL Fundamentals</strong>
-              <span style={{fontSize:'0.75rem', background:'rgba(255,255,255,0.1)', color:'#aaa', padding:'4px 8px', borderRadius:'12px'}}>Not Started</span>
-            </div>
-            <button className="btn btn-secondary" style={{padding:'6px 15px', fontSize:'0.75rem'}}>Start Module</button>
-          </div>
+          {trainingPlan.recommendations.length === 0 ? (
+            <div style={{ color:'var(--text-muted)', fontSize:'0.9rem' }}>No training required. Ready for deployment.</div>
+          ) : (
+            trainingPlan.recommendations.map(course => (
+              <div key={course.id} style={{ padding:'20px', background:'rgba(255,255,255,0.03)', borderLeft: course.status === 'In Progress' ? '3px solid #00D4FF' : '3px solid #555', borderRadius:'4px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
+                  <strong style={{fontSize:'0.95rem'}}>{course.title}</strong>
+                  <span style={{
+                    fontSize:'0.75rem', 
+                    background: course.status === 'In Progress' ? 'rgba(0,212,255,0.1)' : 'rgba(255,255,255,0.1)', 
+                    color: course.status === 'In Progress' ? '#00D4FF' : '#aaa', 
+                    padding:'4px 8px', borderRadius:'12px'
+                  }}>
+                    {course.status}
+                  </span>
+                </div>
+                <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginBottom:'10px' }}>Targets: {course.skill}</div>
+                
+                {course.status === 'In Progress' ? (
+                  <div style={{height:'4px', background:'rgba(255,255,255,0.1)', borderRadius:'2px'}}>
+                    <motion.div initial={{width:0}} animate={{width:'5%'}} transition={{duration:1.5}} style={{height:'100%',background:'#00D4FF',borderRadius:'2px',boxShadow:'0 0 8px #00D4FF'}}/>
+                  </div>
+                ) : (
+                  <button className="btn btn-secondary" onClick={() => handleEnrollment(course.id)} style={{padding:'6px 15px', fontSize:'0.75rem'}}>Start Module</button>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
   );
 };
 
+
+// ------------------------------------------------------------------
+// OPPORTUNITIES TAB (Phase 4 Dynamic Hub)
+// ------------------------------------------------------------------
+const OpportunitiesTab = ({ user }) => {
+  const [opps, setOpps] = useState(null);
+
+  // Dynamically calculate matching network state based on actual User Skills constraint
+  useEffect(() => {
+    fetch('http://localhost:3000/api/opportunities/match', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ consultantId: "1", userSkills: user.skills })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) setOpps(data.matches);
+    }).catch(e => console.error("Dynamic Sync Failed", e));
+  }, [user.skills]);
+
+  const applyForJob = async (id) => {
+    setOpps(prev => prev.map(o => o.id === id ? { ...o, status: 'Applied' } : o)); // Optimistic UI
+    try {
+      await fetch('http://localhost:3000/api/opportunities/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consultantId: "1", jobId: id })
+      });
+    } catch (e) { 
+      alert("⚠️ Warning: Node.js Backend is disconnected! Job Application was successful in React memory.");
+    }
+  };
+
+  if (!opps) return <div style={{padding:'40px', color:'var(--accent-cyan)'}}>Running Mathematical Skill Intersection Agent...</div>;
+
+  return (
+    <div className="tab-anim-wrapper glass-card" style={{ padding:'40px' }}>
+      <h3><TrendingUp size={20} style={{marginRight:'10px', color:'var(--accent-cyan)', verticalAlign:'middle'}}/> Market Opportunities</h3>
+      <p style={{ color:'var(--text-muted)', fontSize:'0.9rem', marginBottom:'30px' }}>
+        AI-Matched roles algorithmically dynamically scored against your latest skill extraction ({user.skills.join(', ')}).
+      </p>
+      
+      <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
+        <AnimatePresence>
+          {opps.map((opp) => (
+            <motion.div 
+              key={opp.id} 
+              layout
+              initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }}
+              style={{ background:'rgba(255,255,255,0.03)', padding:'25px', borderRadius:'12px', borderLeft:`4px solid ${opp.matchScore >= 90 ? '#00FFB3' : opp.matchScore >= 60 ? '#00D4FF' : '#FFB800'}`, borderBottom:'1px solid rgba(255,255,255,0.05)' }}
+            >
+               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
+                 <h4 style={{ margin:0, fontSize:'1.1rem', display:'flex', alignItems:'center', gap:'10px' }}>
+                   {opp.title}
+                   {opp.matchScore < 60 && (
+                     <span style={{ fontSize:'0.7rem', padding:'4px 8px', background:'rgba(255,184,0,0.1)', color:'#FFB800', borderRadius:'12px', border:'1px solid rgba(255,184,0,0.4)', fontWeight:'normal' }}>
+                       ⚠️ Need to improve skills
+                     </span>
+                   )}
+                 </h4>
+                 <span style={{ color: opp.matchScore >= 90 ? '#00FFB3' : opp.matchScore >= 60 ? '#00D4FF' : '#FFB800', fontWeight:'bold', display:'flex', alignItems:'center', gap:'5px' }}>
+                   <Zap size={14}/> {opp.matchScore}% Match
+                 </span>
+               </div>
+               
+               <div style={{ fontSize:'0.85rem', color:'var(--text-muted)', marginBottom:'15px' }}>{opp.client} • {opp.location}</div>
+               
+               {/* Dynamically Map Missing Skills if any exist */}
+               {opp.missingSkills.length > 0 && (
+                 <div style={{ marginBottom:'20px', fontSize:'0.8rem' }}>
+                   <strong style={{ color:'#aaa' }}>Missing Skills:</strong>
+                   <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', marginTop:'5px' }}>
+                     {opp.missingSkills.map(ms => (
+                       <span key={ms} style={{ background:'rgba(255,51,102,0.1)', color:'#FF3366', padding:'2px 8px', borderRadius:'4px', border:'1px solid rgba(255,51,102,0.2)' }}>{ms}</span>
+                     ))}
+                   </div>
+                 </div>
+               )}
+
+               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                 <span style={{ 
+                   fontSize:'0.75rem', padding:'6px 12px', borderRadius:'20px', 
+                   background: opp.status === 'New Match' ? 'rgba(0,212,255,0.1)' : opp.status === 'Applied' ? 'rgba(255,184,0,0.1)' : 'rgba(0,255,179,0.1)',
+                   color: opp.status === 'New Match' ? '#00D4FF' : opp.status === 'Applied' ? '#FFB800' : '#00FFB3',
+                   border: `1px solid ${opp.status === 'New Match' ? 'rgba(0,212,255,0.3)' : opp.status === 'Applied' ? 'rgba(255,184,0,0.3)' : 'rgba(0,255,179,0.3)'}`
+                 }}>
+                   {opp.status}
+                 </span>
+                 
+                 {opp.status === 'New Match' && (
+                   <button onClick={() => applyForJob(opp.id)} className="btn btn-primary" style={{ padding:'8px 20px', fontSize:'0.8rem' }}>Express Interest</button>
+                 )}
+                 {opp.status !== 'New Match' && (
+                   <button className="btn btn-secondary" style={{ padding:'8px 20px', fontSize:'0.8rem', opacity:0.5 }}>Application Sent</button>
+                 )}
+               </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+};
 
 // ------------------------------------------------------------------
 // MAIN DASHBOARD COMPONENT
@@ -431,7 +609,8 @@ const ConsultantDashboard = () => {
     { id: 'overview', label: 'Current Status' },
     { id: 'resume', label: 'My Resume' },
     { id: 'attendance', label: 'Attendance' },
-    { id: 'training', label: 'Training & Skills' }
+    { id: 'training', label: 'Training & Skills' },
+    { id: 'opportunities', label: 'Opportunities' }
   ];
 
   return (
@@ -445,7 +624,11 @@ const ConsultantDashboard = () => {
               <h1 style={{ margin:0, fontSize:'1.8rem', letterSpacing:'1px', textTransform:'uppercase' }}>Consultant <span className="cyan">Portal</span></h1>
               <div style={{ color:'var(--text-muted)', marginTop:'5px', fontSize:'0.9rem' }}>Welcome back, {user.name}. Here is your benchmark status.</div>
             </div>
-            <button className="btn btn-primary" style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+            <button 
+              className="btn btn-primary" 
+              onClick={() => alert(`Opportunity Matching Agent Activated!\n\nScanning Hexaware client network for ${user.department} roles requiring ${user.skills.join(', ')}...`)}
+              style={{ display:'flex', alignItems:'center', gap:'8px' }}
+            >
               <TrendingUp size={18}/> View Market Opportunities
             </button>
           </div>
@@ -479,7 +662,8 @@ const ConsultantDashboard = () => {
               {activeTab === 'overview' && <CurrentStatusTab user={user} />}
               {activeTab === 'resume' && <ResumeTab />}
               {activeTab === 'attendance' && <AttendanceTab />}
-              {activeTab === 'training' && <TrainingTab />}
+              {activeTab === 'training' && <TrainingTab user={user} />}
+              {activeTab === 'opportunities' && <OpportunitiesTab user={user} />}
             </motion.div>
           </AnimatePresence>
         </main>

@@ -1,9 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageTransition from '../components/PageTransition';
 import Sidebar from '../components/Sidebar';
-import CONSULTANTS from '../../data/consultants.json';
-import AGENTS from '../../data/agents.json';
 import { Search, Filter, DownloadCloud, FileText, AlertCircle, RefreshCw } from 'lucide-react';
 
 const AdminConsole = () => {
@@ -11,14 +9,52 @@ const AdminConsole = () => {
   const [deptFilter, setDeptFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   
+  // Phase 5: Dynamic Remote Datastores
+  const [consultants, setConsultants] = useState([]);
+  const [metrics, setMetrics] = useState({ agents: [], alerts: [] });
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Poll background server for structural mappings
+  useEffect(() => {
+    Promise.all([
+      fetch('http://localhost:3000/api/admin/consultants').then(r => r.json()),
+      fetch('http://localhost:3000/api/admin/metrics').then(r => r.json())
+    ]).then(([consData, metData]) => {
+      if(consData.success) setConsultants(consData.consultants);
+      if(metData.success) {
+        setMetrics({ agents: metData.agents, alerts: metData.alerts });
+      }
+      setIsLoading(false);
+    }).catch(e => {
+      console.error("Admin Sync Offline", e);
+      setIsLoading(false);
+    });
+  }, []);
+
   const filteredConsultants = useMemo(() => {
-    return CONSULTANTS.consultants.filter(c => {
+    return consultants.filter(c => {
       const matchSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.id.toLowerCase().includes(searchTerm.toLowerCase()) || c.skills.join(', ').toLowerCase().includes(searchTerm.toLowerCase());
       const matchDept = deptFilter === 'All' || c.department.includes(deptFilter);
       const matchStatus = statusFilter === 'All' || c.resumeStatus === statusFilter;
       return matchSearch && matchDept && matchStatus;
     });
-  }, [searchTerm, deptFilter, statusFilter]);
+  }, [searchTerm, deptFilter, statusFilter, consultants]);
+
+  const exportCSV = () => {
+    const headers = ['ID', 'Name', 'Department', 'Skills', 'Status'];
+    const rows = filteredConsultants.map(c => [
+      c.id, c.name, c.department, `"${c.skills.join(', ')}"`, c.resumeStatus
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `consultants_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <PageTransition>
@@ -33,10 +69,10 @@ const AdminConsole = () => {
             </div>
             
             <div style={{ display:'flex', gap:'10px' }}>
-              <button className="btn btn-secondary" style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+              <button className="btn btn-secondary" onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:'8px' }}>
                 <FileText size={16}/> CSV
               </button>
-              <button className="btn btn-primary" style={{ display:'flex', alignItems:'center', gap:'8px', background:'var(--accent-violet)', borderColor:'var(--accent-violet)' }}>
+              <button className="btn btn-primary" onClick={() => alert("Report Generation Agent triggered: Assembling PDF report from current filter view.")} style={{ display:'flex', alignItems:'center', gap:'8px', background:'var(--accent-violet)', borderColor:'var(--accent-violet)' }}>
                 <DownloadCloud size={16}/> Export Report
               </button>
             </div>
@@ -44,6 +80,13 @@ const AdminConsole = () => {
 
           <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'30px', alignItems:'start' }}>
             
+            {isLoading ? (
+               <div style={{gridColumn:'1 / -1', padding:'60px', textAlign:'center', color:'var(--accent-cyan)'}}>
+                 <RefreshCw className="spin-slow" size={32} style={{marginBottom:'15px'}}/><br/>
+                 Syncing Global Hexaware Database Nodes...
+               </div>
+            ) : (
+            <>
             {/* Consultant Pool Table */}
             <div className="glass-card" style={{ padding:'30px', display:'flex', flexDirection:'column', height:'calc(100vh - 160px)' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
@@ -67,6 +110,8 @@ const AdminConsole = () => {
                     style={{ background:'rgba(0,0,0,0.5)', border:'1px solid rgba(255,255,255,0.1)', color:'#fff', padding:'8px 12px', borderRadius:'6px' }}
                   >
                     <option value="All">All Statuses</option>
+                    <option value="Active Match">Active Match</option>
+                    <option value="In Training">In Training</option>
                     <option value="Updated">Updated</option>
                     <option value="Pending">Pending</option>
                   </select>
@@ -116,8 +161,14 @@ const AdminConsole = () => {
                           </td>
                           <td style={{ padding:'12px' }}>
                             <span style={{
-                              background: c.resumeStatus === 'Updated' ? 'rgba(0,255,179,0.1)' : 'rgba(255,184,0,0.1)',
-                              color: c.resumeStatus === 'Updated' ? '#00FFB3' : '#FFB800',
+                              background: c.resumeStatus === 'Active Match' ? 'rgba(0,255,179,0.1)' 
+                                : c.resumeStatus === 'In Training' ? 'rgba(0,212,255,0.1)' 
+                                : c.resumeStatus === 'Updated' ? 'rgba(255,255,255,0.1)'
+                                : 'rgba(255,184,0,0.1)',
+                              color: c.resumeStatus === 'Active Match' ? '#00FFB3' 
+                                : c.resumeStatus === 'In Training' ? '#00D4FF' 
+                                : c.resumeStatus === 'Updated' ? '#aaa'
+                                : '#FFB800',
                               padding:'4px 8px', borderRadius:'12px', fontSize:'0.75rem'
                             }}>
                               {c.resumeStatus}
@@ -144,7 +195,7 @@ const AdminConsole = () => {
                 </h3>
                 
                 <div style={{ display:'flex', flexDirection:'column', gap:'15px' }}>
-                  {AGENTS.agents.map(a => (
+                  {metrics.agents.map(a => (
                     <div key={a.id} style={{ background:'rgba(0,0,0,0.3)', padding:'15px', borderRadius:'8px', borderLeft:`4px solid ${a.color}` }}>
                       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px' }}>
                         <span style={{ fontWeight:'600', fontSize:'0.9rem' }}>{a.name} Node</span>
@@ -180,13 +231,17 @@ const AdminConsole = () => {
                   <AlertCircle size={18} style={{color:'#FFB800'}}/> System Alerts
                 </h3>
                 <div style={{ fontSize:'0.85rem', color:'var(--text-muted)', lineHeight:'1.5' }}>
-                  <p><strong style={{color:'#fff'}}>[14:02]</strong> Opportunity Agent matched 3 consultants to new requirements.</p>
-                  <p><strong style={{color:'#fff'}}>[13:45]</strong> Resume Agent successfully parsed 8 newly uploaded PDFs.</p>
-                  <p><strong style={{color:'#fff'}}>[12:10]</strong> Training Agent detected 12 skill gaps across the Java department.</p>
+                  {metrics.alerts.length > 0 ? metrics.alerts.map((al, idx) => (
+                    <p key={idx}><strong style={{color:'#fff'}}>[{al.time}]</strong> {al.msg}</p>
+                  )) : (
+                    <p>System Operating Nominally.</p>
+                  )}
                 </div>
               </div>
 
             </div>
+            </>
+            )}
           </div>
         </main>
       </div>

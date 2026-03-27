@@ -41,6 +41,13 @@
 /* ─── Reset & Base ─── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  height: 100vh;
+}
+
 html {
   scroll-behavior: smooth;
   overflow: hidden;
